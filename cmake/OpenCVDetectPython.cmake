@@ -126,7 +126,8 @@ function(find_python preferred_version min_version library_env include_dir_env
 
     if(NOT ANDROID AND NOT IOS)
       if(CMAKE_HOST_UNIX)
-        execute_process(COMMAND ${_executable} -c "from distutils.sysconfig import *; print(get_python_lib())"
+        # depending on where the install prefix is, python may choose between site-packages and dist-packages
+        execute_process(COMMAND ${_executable} -c "from distutils.sysconfig import *; print(get_python_lib(prefix='${CMAKE_INSTALL_PREFIX}'))"
                         RESULT_VARIABLE _cvpy_process
                         OUTPUT_VARIABLE _std_packages_path
                         OUTPUT_STRIP_TRAILING_WHITESPACE)
