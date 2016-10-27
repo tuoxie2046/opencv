@@ -27,23 +27,30 @@ static void help()
 
 int main( int argc, char** argv )
 {
-    help();
-    const char* imagename = argc > 1 ? argv[1] : "../data/lena.jpg";
+    cv::CommandLineParser parser(argc, argv, "{help h | |}{@image|../data/lena.jpg|}");
+    if (parser.has("help"))
+    {
+        help();
+        return 0;
+    }
+    string imagename = parser.get<string>("@image");
 #if DEMO_MIXED_API_USE
-    Ptr<IplImage> iplimg(cvLoadImage(imagename)); // Ptr<T> is safe ref-counting pointer class
+    //! [iplimage]
+    Ptr<IplImage> iplimg(cvLoadImage(imagename.c_str())); // Ptr<T> is safe ref-counting pointer class
     if(!iplimg)
     {
-        fprintf(stderr, "Can not load image %s\n", imagename);
+        fprintf(stderr, "Can not load image %s\n", imagename.c_str());
         return -1;
     }
     Mat img = cv::cvarrToMat(iplimg); // cv::Mat replaces the CvMat and IplImage, but it's easy to convert
     // between the old and the new data structures (by default, only the header
     // is converted, while the data is shared)
+    //! [iplimage]
 #else
     Mat img = imread(imagename); // the newer cvLoadImage alternative, MATLAB-style function
     if(img.empty())
     {
-        fprintf(stderr, "Can not load image %s\n", imagename);
+        fprintf(stderr, "Can not load image %s\n", imagename.c_str());
         return -1;
     }
 #endif

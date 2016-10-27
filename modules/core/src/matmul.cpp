@@ -12,6 +12,7 @@
 //
 // Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
 // Copyright (C) 2009-2011, Willow Garage Inc., all rights reserved.
+// Copyright (C) 2014-2015, Itseez Inc., all rights reserved.
 // Third party copyrights are property of their respective owners.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -720,6 +721,16 @@ static bool ocl_gemm_amdblas( InputArray matA, InputArray matB, double alpha,
         return false;
 
     UMat A = matA.getUMat(), B = matB.getUMat(), D = matD.getUMat();
+    if (!ocl::internal::isCLBuffer(A) || !ocl::internal::isCLBuffer(B) || !ocl::internal::isCLBuffer(D))
+    {
+        return false;
+    }
+    if (haveC)
+    {
+        UMat C = matC.getUMat();
+        if (!ocl::internal::isCLBuffer(C))
+            return false;
+    }
     if (haveC)
         ctrans ? transpose(matC, D) : matC.copyTo(D);
     else
@@ -848,8 +859,8 @@ static bool ocl_gemm( InputArray matA, InputArray matB, double alpha,
                ocl::KernelArg::ReadWrite(D, cn, kercn),
                sizeA.width, (float)alpha, (float)beta);
 
-    size_t globalsize[2] = { sizeD.width * cn / kercn, sizeD.height};
-    size_t localsize[2] = { block_size, block_size};
+    size_t globalsize[2] = { (size_t)sizeD.width * cn / kercn, (size_t)sizeD.height};
+    size_t localsize[2] = { (size_t)block_size, (size_t)block_size};
     return k.run(2, globalsize, block_size!=1 ? localsize : NULL, false);
 }
 #endif
@@ -1184,7 +1195,7 @@ void cv::gemm( InputArray matA, InputArray matB, double alpha,
     GEMMBlockMulFunc blockMulFunc;
     GEMMStoreFunc storeFunc;
     Mat *matD = &D, tmat;
-    int tmat_size = 0;
+    size_t tmat_size = 0;
     const uchar* Cdata = C.data;
     size_t Cstep = C.data ? (size_t)C.step : 0;
     AutoBuffer<uchar> buf;
@@ -1217,7 +1228,7 @@ void cv::gemm( InputArray matA, InputArray matB, double alpha,
 
     if( D.data == A.data || D.data == B.data )
     {
-        tmat_size = d_size.width*d_size.height*CV_ELEM_SIZE(type);
+        tmat_size = (size_t)d_size.width*d_size.height*CV_ELEM_SIZE(type);
         // Allocate tmat later, once the size of buf is known
         matD = &tmat;
     }
@@ -1308,7 +1319,7 @@ void cv::gemm( InputArray matA, InputArray matB, double alpha,
         int is_b_t = flags & GEMM_2_T;
         int elem_size = CV_ELEM_SIZE(type);
         int dk0_1, dk0_2;
-        int a_buf_size = 0, b_buf_size, d_buf_size;
+        size_t a_buf_size = 0, b_buf_size, d_buf_size;
         uchar* a_buf = 0;
         uchar* b_buf = 0;
         uchar* d_buf = 0;
@@ -1349,12 +1360,12 @@ void cv::gemm( InputArray matA, InputArray matB, double alpha,
             dn0 = block_size / dk0;
 
         dk0_1 = (dn0+dn0/8+2) & -2;
-        b_buf_size = (dk0+dk0/8+1)*dk0_1*elem_size;
-        d_buf_size = (dk0+dk0/8+1)*dk0_1*work_elem_size;
+        b_buf_size = (size_t)(dk0+dk0/8+1)*dk0_1*elem_size;
+        d_buf_size = (size_t)(dk0+dk0/8+1)*dk0_1*work_elem_size;
 
         if( is_a_t )
         {
-            a_buf_size = (dm0+dm0/8+1)*((dk0+dk0/8+2)&-2)*elem_size;
+            a_buf_size = (size_t)(dm0+dm0/8+1)*((dk0+dk0/8+2)&-2)*elem_size;
             flags &= ~GEMM_1_T;
         }
 
@@ -2293,7 +2304,7 @@ static bool ocl_scaleAdd( InputArray _src1, double alpha, InputArray _src2, Outp
     else
         k.args(src1arg, src2arg, dstarg, alpha);
 
-    size_t globalsize[2] = { dst.cols * cn / kercn, (dst.rows + rowsPerWI - 1) / rowsPerWI };
+    size_t globalsize[2] = { (size_t)dst.cols * cn / kercn, ((size_t)dst.rows + rowsPerWI - 1) / rowsPerWI };
     return k.run(2, globalsize, NULL, false);
 }
 
@@ -2905,7 +2916,7 @@ dotProd_(const T* src1, const T* src2, int len)
 static double dotProd_8u(const uchar* src1, const uchar* src2, int len)
 {
     double r = 0;
-#if ARITHM_USE_IPP && 0
+#if ARITHM_USE_IPP && IPP_DISABLE_BLOCK
     CV_IPP_CHECK()
     {
         if (0 <= ippiDotProd_8u64f_C1R(src1, (int)(len*sizeof(src1[0])),
@@ -3012,7 +3023,52 @@ static double dotProd_8s(const schar* src1, const schar* src2, int len)
     int i = 0;
     double r = 0.0;
 
-#if CV_NEON
+#if CV_SSE2
+    if( USE_SSE2 )
+    {
+        int j, len0 = len & -4, blockSize0 = (1 << 13), blockSize;
+        __m128i z = _mm_setzero_si128();
+        CV_DECL_ALIGNED(16) int buf[4];
+
+        while( i < len0 )
+        {
+            blockSize = std::min(len0 - i, blockSize0);
+            __m128i s = z;
+            j = 0;
+            for( ; j <= blockSize - 16; j += 16 )
+            {
+                __m128i b0 = _mm_loadu_si128((const __m128i*)(src1 + j));
+                __m128i b1 = _mm_loadu_si128((const __m128i*)(src2 + j));
+                __m128i s0, s1, s2, s3;
+                s0 = _mm_srai_epi16(_mm_unpacklo_epi8(b0, b0), 8);
+                s2 = _mm_srai_epi16(_mm_unpackhi_epi8(b0, b0), 8);
+                s1 = _mm_srai_epi16(_mm_unpacklo_epi8(b1, b1), 8);
+                s3 = _mm_srai_epi16(_mm_unpackhi_epi8(b1, b1), 8);
+                s0 = _mm_madd_epi16(s0, s1);
+                s2 = _mm_madd_epi16(s2, s3);
+                s = _mm_add_epi32(s, s0);
+                s = _mm_add_epi32(s, s2);
+            }
+
+            for( ; j < blockSize; j += 4 )
+            {
+                __m128i s0 = _mm_cvtsi32_si128(*(const int*)(src1 + j));
+                __m128i s1 = _mm_cvtsi32_si128(*(const int*)(src2 + j));
+                s0 = _mm_srai_epi16(_mm_unpacklo_epi8(s0, s0), 8);
+                s1 = _mm_srai_epi16(_mm_unpacklo_epi8(s1, s1), 8);
+                s0 = _mm_madd_epi16(s0, s1);
+                s = _mm_add_epi32(s, s0);
+            }
+
+            _mm_store_si128((__m128i*)buf, s);
+            r += buf[0] + buf[1] + buf[2] + buf[3];
+
+            src1 += blockSize;
+            src2 += blockSize;
+            i += blockSize;
+        }
+    }
+#elif CV_NEON
     int len0 = len & -8, blockSize0 = (1 << 14), blockSize;
     int32x4_t v_zero = vdupq_n_s32(0);
     CV_DECL_ALIGNED(16) int buf[4];
@@ -3075,7 +3131,7 @@ static double dotProd_16u(const ushort* src1, const ushort* src2, int len)
 
 static double dotProd_16s(const short* src1, const short* src2, int len)
 {
-#if (ARITHM_USE_IPP == 1)
+#if (ARITHM_USE_IPP == 1) && (IPP_VERSION_X100 != 900) // bug in IPP 9.0.0
     CV_IPP_CHECK()
     {
         double r = 0;

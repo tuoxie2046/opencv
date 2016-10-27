@@ -11,6 +11,7 @@
 //                For Open Source Computer Vision Library
 //
 // Copyright (C) 2013, NVIDIA Corporation, all rights reserved.
+// Copyright (C) 2014, Itseez Inc., all rights reserved.
 // Third party copyrights are property of their respective owners.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -106,7 +107,7 @@ namespace clahe
         cv::UMat lut = _lut.getUMat();
 
         size_t localThreads[3]  = { 32, 8, 1 };
-        size_t globalThreads[3] = { src.cols, src.rows, 1 };
+        size_t globalThreads[3] = { (size_t)src.cols, (size_t)src.rows, 1 };
 
         int idx = 0;
         idx = k.set(idx, cv::ocl::KernelArg::ReadOnlyNoSize(src));
@@ -319,8 +320,6 @@ namespace
     public:
         CLAHE_Impl(double clipLimit = 40.0, int tilesX = 8, int tilesY = 8);
 
-        cv::AlgorithmInfo* info() const;
-
         void apply(cv::InputArray src, cv::OutputArray dst);
 
         void setClipLimit(double clipLimit);
@@ -349,11 +348,6 @@ namespace
         clipLimit_(clipLimit), tilesX_(tilesX), tilesY_(tilesY)
     {
     }
-
-    CV_INIT_ALGORITHM(CLAHE_Impl, "CLAHE",
-        obj.info()->addParam(obj, "clipLimit", obj.clipLimit_);
-        obj.info()->addParam(obj, "tilesX", obj.tilesX_);
-        obj.info()->addParam(obj, "tilesY", obj.tilesY_))
 
     void CLAHE_Impl::apply(cv::InputArray _src, cv::OutputArray _dst)
     {

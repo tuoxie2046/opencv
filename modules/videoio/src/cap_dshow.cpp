@@ -93,6 +93,11 @@ Thanks to:
 #pragma warning(disable: 4995)
 #endif
 
+#ifdef __MINGW32__
+// MinGW does not understand COM interfaces
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#endif
+
 #include <tchar.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -134,8 +139,6 @@ public:
 
     virtual HRESULT STDMETHODCALLTYPE Clone(
         /* [out] */ IEnumPIDMap **ppIEnumPIDMap) = 0;
-
-    virtual ~IEnumPIDMap() {}
 };
 
 interface IMPEG2PIDMap : public IUnknown
@@ -151,8 +154,6 @@ interface IMPEG2PIDMap : public IUnknown
 
     virtual HRESULT STDMETHODCALLTYPE EnumPIDMap(
         /* [out] */ IEnumPIDMap **pIEnumPIDMap) = 0;
-
-    virtual ~IMPEG2PIDMap() {}
 };
 
 #endif
@@ -238,8 +239,6 @@ interface ISampleGrabberCB : public IUnknown
         double SampleTime,
         BYTE *pBuffer,
         LONG BufferLen) = 0;
-
-    virtual ~ISampleGrabberCB() {}
 };
 
 interface ISampleGrabber : public IUnknown
@@ -266,8 +265,6 @@ interface ISampleGrabber : public IUnknown
     virtual HRESULT STDMETHODCALLTYPE SetCallback(
         ISampleGrabberCB *pCallback,
         LONG WhichMethodToCallback) = 0;
-
-    virtual ~ISampleGrabber() {}
 };
 
 #ifndef HEADER
@@ -1847,6 +1844,8 @@ bool videoInput::setVideoSettingCamera(int deviceID, long Property, long lValue,
         hr = VDList[deviceID]->pVideoInputFilter->QueryInterface(IID_IAMCameraControl, (void**)&pIAMCameraControl);
         if (FAILED(hr)) {
             DebugPrintOut("Error\n");
+            if(VDList[deviceID]->pVideoInputFilter)VDList[deviceID]->pVideoInputFilter->Release();
+            if(VDList[deviceID]->pVideoInputFilter)VDList[deviceID]->pVideoInputFilter = NULL;
             return false;
         }
         else
@@ -1865,6 +1864,8 @@ bool videoInput::setVideoSettingCamera(int deviceID, long Property, long lValue,
                 pIAMCameraControl->Set(Property, lValue, Flags);
             }
             pIAMCameraControl->Release();
+            if(VDList[deviceID]->pVideoInputFilter)VDList[deviceID]->pVideoInputFilter->Release();
+            if(VDList[deviceID]->pVideoInputFilter)VDList[deviceID]->pVideoInputFilter = NULL;
             return true;
         }
     }
@@ -2265,7 +2266,7 @@ int videoInput::getVideoPropertyFromCV(int cv_property){
         case CV_CAP_PROP_GAMMA:
             return VideoProcAmp_Gamma;
 
-        case CV_CAP_PROP_MONOCROME:
+        case CV_CAP_PROP_MONOCHROME:
             return VideoProcAmp_ColorEnable;
 
         case CV_CAP_PROP_WHITE_BALANCE_BLUE_U:
@@ -3178,7 +3179,7 @@ double VideoCapture_DShow::getProperty(int propIdx) const
     case CV_CAP_PROP_SATURATION:
     case CV_CAP_PROP_SHARPNESS:
     case CV_CAP_PROP_GAMMA:
-    case CV_CAP_PROP_MONOCROME:
+    case CV_CAP_PROP_MONOCHROME:
     case CV_CAP_PROP_WHITE_BALANCE_BLUE_U:
     case CV_CAP_PROP_BACKLIGHT:
     case CV_CAP_PROP_GAIN:
@@ -3281,7 +3282,7 @@ bool VideoCapture_DShow::setProperty(int propIdx, double propVal)
     case CV_CAP_PROP_SATURATION:
     case CV_CAP_PROP_SHARPNESS:
     case CV_CAP_PROP_GAMMA:
-    case CV_CAP_PROP_MONOCROME:
+    case CV_CAP_PROP_MONOCHROME:
     case CV_CAP_PROP_WHITE_BALANCE_BLUE_U:
     case CV_CAP_PROP_BACKLIGHT:
     case CV_CAP_PROP_GAIN:

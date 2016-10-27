@@ -124,11 +124,11 @@ protected:
 
     bool readCamerasParams();
 
-    double getDepthGeneratorProperty(int propIdx);
+    double getDepthGeneratorProperty(int propIdx) const;
     bool setDepthGeneratorProperty(int propIdx, double propVal);
-    double getImageGeneratorProperty(int propIdx);
+    double getImageGeneratorProperty(int propIdx) const;
     bool setImageGeneratorProperty(int propIdx, double propVal);
-    double getCommonProperty(int propIdx);
+    double getCommonProperty(int propIdx) const;
     bool setCommonProperty(int propIdx, double propVal);
 
     // OpenNI context
@@ -444,7 +444,7 @@ bool CvCapture_OpenNI2::setProperty( int propIdx, double propValue )
     return isSet;
 }
 
-double CvCapture_OpenNI2::getCommonProperty( int propIdx )
+double CvCapture_OpenNI2::getCommonProperty( int propIdx ) const
 {
     double propValue = 0;
 
@@ -466,7 +466,7 @@ double CvCapture_OpenNI2::getCommonProperty( int propIdx )
         propValue = getDepthGeneratorProperty( propIdx );
         break;
     case CV_CAP_PROP_OPENNI2_SYNC :
-        propValue = device.getDepthColorSyncEnabled();
+        propValue = const_cast<CvCapture_OpenNI2 *>(this)->device.getDepthColorSyncEnabled();
     case CV_CAP_PROP_OPENNI2_MIRROR:
     {
         bool isMirroring = color.getMirroringEnabled() && depth.getMirroringEnabled();
@@ -508,7 +508,7 @@ bool CvCapture_OpenNI2::setCommonProperty( int propIdx, double propValue )
     return isSet;
 }
 
-double CvCapture_OpenNI2::getDepthGeneratorProperty( int propIdx )
+double CvCapture_OpenNI2::getDepthGeneratorProperty( int propIdx ) const
 {
     double propValue = 0;
     if( !depth.isValid() )
@@ -567,13 +567,13 @@ bool CvCapture_OpenNI2::setDepthGeneratorProperty( int propIdx, double propValue
     {
     case CV_CAP_PROP_OPENNI_REGISTRATION:
         {
-            if( propValue < 1.0 ) // "on"
+            if( propValue != 0.0 ) // "on"
             {
                 // if there isn't image generator (i.e. ASUS XtionPro doesn't have it)
                 // then the property isn't avaliable
                 if ( color.isValid() )
                 {
-                    openni::ImageRegistrationMode mode = propValue < 1.0 ? openni::IMAGE_REGISTRATION_OFF : openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR;
+                    openni::ImageRegistrationMode mode = propValue != 0.0 ? openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR : openni::IMAGE_REGISTRATION_OFF;
                     if( !device.getImageRegistrationMode() == mode )
                     {
                         if (device.isImageRegistrationModeSupported(mode))
@@ -608,7 +608,7 @@ bool CvCapture_OpenNI2::setDepthGeneratorProperty( int propIdx, double propValue
     return isSet;
 }
 
-double CvCapture_OpenNI2::getImageGeneratorProperty( int propIdx )
+double CvCapture_OpenNI2::getImageGeneratorProperty( int propIdx ) const
 {
     double propValue = 0.;
     if( !color.isValid() )
@@ -903,7 +903,7 @@ IplImage* CvCapture_OpenNI2::retrieveFrame( int outputType )
     return image;
 }
 
-CvCapture* cvCreateCameraCapture_OpenNI( int index )
+CvCapture* cvCreateCameraCapture_OpenNI2( int index )
 {
     CvCapture_OpenNI2* capture = new CvCapture_OpenNI2( index );
 
