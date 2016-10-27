@@ -66,7 +66,10 @@ execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import distutils.sysconfig; pri
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 set_target_properties(${the_module} PROPERTIES
-                      LIBRARY_OUTPUT_DIRECTORY  "${LIBRARY_OUTPUT_PATH}/${MODULE_INSTALL_SUBDIR}"
+                      # Woody hack: Can't install python wrapper otherwise.
+                      # I spent an hour on this and still couldn't find the right
+                      # fix. Giving up.
+                      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_INSTALL_PREFIX}/${PYTHON_PACKAGES_PATH}"
                       PREFIX ""
                       OUTPUT_NAME cv2
                       SUFFIX ${CVPY_SUFFIX})
