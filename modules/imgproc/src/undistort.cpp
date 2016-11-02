@@ -146,75 +146,74 @@ void cv::initUndistortRectifyMap( InputArray _cameraMatrix, InputArray _distCoef
 
         int j = 0;
 #if CV_AVX2
-if( USE_AVX2 && m1type != CV_16SC2 && m1type != CV_32FC1 )
+if( USE_AVX2 )
 {
-        __m256d one = _mm256_set1_pd(1.0);
-        __m256d two = _mm256_set1_pd(2.0);
+        __m256d __one = _mm256_set1_pd(1.0);
+        __m256d __two = _mm256_set1_pd(2.0);
         double CV_DECL_ALIGNED(32) xdv[4];
         double CV_DECL_ALIGNED(32) ydv[4];
         for( ; j < size.width; j += 4, _x += 4 * ir[0], _y += 4 * ir[3], _w += 4 * ir[6] )
         {
-            // Woody: Fun stuff!
             // Question: Should we load the constants first?
-            __m256d w = _mm256_div_pd(one, _mm256_set_pd(_w + 3 * ir[6], _w + 2 * ir[6], _w + ir[6], _w));
+            __m256d w = _mm256_div_pd(__one, _mm256_set_pd(_w + 3 * ir[6], _w + 2 * ir[6], _w + ir[6], _w));
             __m256d x = _mm256_mul_pd(_mm256_set_pd(_x + 3 * ir[0], _x + 2 * ir[0], _x + ir[0], _x), w);
             __m256d y = _mm256_mul_pd(_mm256_set_pd(_y + 3 * ir[3], _y + 2 * ir[3], _y + ir[3], _y), w);
             __m256d x2 = _mm256_mul_pd(x, x);
             __m256d y2 = _mm256_mul_pd(y, y);
             __m256d r2 = _mm256_add_pd(x2, y2);
-            __m256d _2xy = _mm256_mul_pd(two, _mm256_mul_pd(x, y));
-            __m256d kr = _m256_div_pd(
-                _mm256_add_pd(one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_m256_set1_pd(k3), r2), _m256_set1_pd(k2)), r2), _m256_set1_pd(k1)), r2)),
-                _mm256_add_pd(one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_m256_set1_pd(k6), r2), _m256_set1_pd(k5)), r2), _m256_set1_pd(k4)), r2))
+            __m256d _2xy = _mm256_mul_pd(__two, _mm256_mul_pd(x, y));
+            __m256d kr = _mm256_div_pd(
+                _mm256_add_pd(__one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(k3), r2), _mm256_set1_pd(k2)), r2), _mm256_set1_pd(k1)), r2)),
+                _mm256_add_pd(__one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(k6), r2), _mm256_set1_pd(k5)), r2), _mm256_set1_pd(k4)), r2))
             );
             __m256d r22 = _mm256_mul_pd(r2, r2);
-            __m256d xd = _m256_mul_add(_m256_mul_add(_m256_mul_add(_m256_mul_add(
+            __m256d xd = _mm256_add_pd(
                 _mm256_mul_pd(x, kr),
-                _mm256_mul_pd(_mm256_set1_pd(p1), _2xy)),
-                _mm256_mul_pd(_mm256_set1_pd(p2), _mm256_add_pd(r2, _mm256_mul_pd(two, x2)))),
-                _mm256_mul_pd(_mm256_set1_pd(s1), r2)),
-                _mm256_mul_pd(_mm256_set1_pd(s2), r22));
-            __m256d yd = _m256_mul_add(_m256_mul_add(_m256_mul_add(_m256_mul_add(
-                _mm256_mul_pd(y, yr),
-                _mm256_mul_pd(_mm256_set1_pd(p1), _mm256_add_pd(r2, _mm256_mul_pd(two, y2)))),
-                _mm256_mul_pd(_mm256_set1_pd(p2), _2xy)),
-                _mm256_mul_pd(_mm256_set1_pd(s3), r2)),
-                _mm256_mul_pd(_mm256_set1_pd(s4), r22));
+                _mm256_add_pd(
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(p1), _2xy),
+                        _mm256_mul_pd(_mm256_set1_pd(p2), _mm256_add_pd(r2, _mm256_mul_pd(__two, x2)))),
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(s1), r2),
+                        _mm256_mul_pd(_mm256_set1_pd(s2), r22))));
+            __m256d yd = _mm256_add_pd(
+                _mm256_mul_pd(y, kr),
+                _mm256_add_pd(
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(p1), _mm256_add_pd(r2, _mm256_mul_pd(__two, y2))),
+                        _mm256_mul_pd(_mm256_set1_pd(p2), _2xy)),
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(s3), r2),
+                        _mm256_mul_pd(_mm256_set1_pd(s4), r22))));
 
             // I have no idea how to parallelize this
-            _m256_store_pd(xdv, xd);
-            _m256_store_pd(ydv, yd);
+            _mm256_store_pd(xdv, xd);
+            _mm256_store_pd(ydv, yd);
 
-            cv::Vec3d vecTilt;
-            double invProj, u, v;
-
-            vecTilt = matTilt*cv::Vec3d(xd[0], yd[0], 1);
-            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
-            u = fx*invProj*vecTilt(0) + u0;
-            v = fy*invProj*vecTilt(1) + v0;
-            m1f[j*2] = (float)u;
-            m1f[j*2+1] = (float)v;
-
-            vecTilt = matTilt*cv::Vec3d(xd[1], yd[1], 1);
-            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
-            u = fx*invProj*vecTilt(0) + u0;
-            v = fy*invProj*vecTilt(1) + v0;
-            m1f[j*2+2] = (float)u;
-            m1f[j*2+3] = (float)v;
-
-            vecTilt = matTilt*cv::Vec3d(xd[2], yd[2], 1);
-            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
-            u = fx*invProj*vecTilt(0) + u0;
-            v = fy*invProj*vecTilt(1) + v0;
-            m1f[j*2+4] = (float)u;
-            m1f[j*2+5] = (float)v;
-
-            vecTilt = matTilt*cv::Vec3d(xd[3], yd[3], 1);
-            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
-            u = fx*invProj*vecTilt(0) + u0;
-            v = fy*invProj*vecTilt(1) + v0;
-            m1f[j*2+6] = (float)u;
-            m1f[j*2+7] = (float)v;
+            for (int a = 0; a < 4; ++a) {
+                cv::Vec3d vecTilt = matTilt * cv::Vec3d(xdv[a], ydv[a], 1);
+                double invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
+                double u = fx*invProj*vecTilt(0) + u0;
+                double v = fy*invProj*vecTilt(1) + v0;
+                if( m1type == CV_16SC2 )
+                {
+                    int iu = saturate_cast<int>(u*INTER_TAB_SIZE);
+                    int iv = saturate_cast<int>(v*INTER_TAB_SIZE);
+                    m1[(j+a)*2] = (short)(iu >> INTER_BITS);
+                    m1[(j+a)*2+1] = (short)(iv >> INTER_BITS);
+                    m2[j+a] = (ushort)((iv & (INTER_TAB_SIZE-1))*INTER_TAB_SIZE + (iu & (INTER_TAB_SIZE-1)));
+                }
+                else if( m1type == CV_32FC1 )
+                {
+                    m1f[j+a] = (float)u;
+                    m2f[j+a] = (float)v;
+                }
+                else
+                {
+                    m1f[(j+a)*2] = (float)u;
+                    m1f[(j+a)*2+1] = (float)v;
+                }
+            }
         }
 }
 #endif
@@ -251,7 +250,6 @@ if( USE_AVX2 && m1type != CV_16SC2 && m1type != CV_32FC1 )
         }
     }
 }
-
 
 void cv::undistort( InputArray _src, OutputArray _dst, InputArray _cameraMatrix,
                     InputArray _distCoeffs, InputArray _newCameraMatrix )
