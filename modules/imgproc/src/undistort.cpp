@@ -144,14 +144,88 @@ void cv::initUndistortRectifyMap( InputArray _cameraMatrix, InputArray _distCoef
         ushort* m2 = (ushort*)m2f;
         double _x = i*ir[1] + ir[2], _y = i*ir[4] + ir[5], _w = i*ir[7] + ir[8];
 
-        for( int j = 0; j < size.width; j++, _x += ir[0], _y += ir[3], _w += ir[6] )
+        int j = 0;
+#if CV_AVX2
+if( USE_AVX2 && m1type != CV_16SC2 && m1type != CV_32FC1 )
+{
+        __m256d one = _mm256_set1_pd(1.0);
+        __m256d two = _mm256_set1_pd(2.0);
+        double CV_DECL_ALIGNED(32) xdv[4];
+        double CV_DECL_ALIGNED(32) ydv[4];
+        for( ; j < size.width; j += 4, _x += 4 * ir[0], _y += 4 * ir[3], _w += 4 * ir[6] )
+        {
+            // Woody: Fun stuff!
+            // Question: Should we load the constants first?
+            __m256d w = _mm256_div_pd(one, _mm256_set_pd(_w + 3 * ir[6], _w + 2 * ir[6], _w + ir[6], _w));
+            __m256d x = _mm256_mul_pd(_mm256_set_pd(_x + 3 * ir[0], _x + 2 * ir[0], _x + ir[0], _x), w);
+            __m256d y = _mm256_mul_pd(_mm256_set_pd(_y + 3 * ir[3], _y + 2 * ir[3], _y + ir[3], _y), w);
+            __m256d x2 = _mm256_mul_pd(x, x);
+            __m256d y2 = _mm256_mul_pd(y, y);
+            __m256d r2 = _mm256_add_pd(x2, y2);
+            __m256d _2xy = _mm256_mul_pd(two, _mm256_mul_pd(x, y));
+            __m256d kr = _m256_div_pd(
+                _mm256_add_pd(one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_m256_set1_pd(k3), r2), _m256_set1_pd(k2)), r2), _m256_set1_pd(k1)), r2)),
+                _mm256_add_pd(one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_m256_set1_pd(k6), r2), _m256_set1_pd(k5)), r2), _m256_set1_pd(k4)), r2))
+            );
+            __m256d r22 = _mm256_mul_pd(r2, r2);
+            __m256d xd = _m256_mul_add(_m256_mul_add(_m256_mul_add(_m256_mul_add(
+                _mm256_mul_pd(x, kr),
+                _mm256_mul_pd(_mm256_set1_pd(p1), _2xy)),
+                _mm256_mul_pd(_mm256_set1_pd(p2), _mm256_add_pd(r2, _mm256_mul_pd(two, x2)))),
+                _mm256_mul_pd(_mm256_set1_pd(s1), r2)),
+                _mm256_mul_pd(_mm256_set1_pd(s2), r22));
+            __m256d yd = _m256_mul_add(_m256_mul_add(_m256_mul_add(_m256_mul_add(
+                _mm256_mul_pd(y, yr),
+                _mm256_mul_pd(_mm256_set1_pd(p1), _mm256_add_pd(r2, _mm256_mul_pd(two, y2)))),
+                _mm256_mul_pd(_mm256_set1_pd(p2), _2xy)),
+                _mm256_mul_pd(_mm256_set1_pd(s3), r2)),
+                _mm256_mul_pd(_mm256_set1_pd(s4), r22));
+
+            // I have no idea how to parallelize this
+            _m256_store_pd(xdv, xd);
+            _m256_store_pd(ydv, yd);
+
+            cv::Vec3d vecTilt;
+            double invProj, u, v;
+
+            vecTilt = matTilt*cv::Vec3d(xd[0], yd[0], 1);
+            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
+            u = fx*invProj*vecTilt(0) + u0;
+            v = fy*invProj*vecTilt(1) + v0;
+            m1f[j*2] = (float)u;
+            m1f[j*2+1] = (float)v;
+
+            vecTilt = matTilt*cv::Vec3d(xd[1], yd[1], 1);
+            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
+            u = fx*invProj*vecTilt(0) + u0;
+            v = fy*invProj*vecTilt(1) + v0;
+            m1f[j*2+2] = (float)u;
+            m1f[j*2+3] = (float)v;
+
+            vecTilt = matTilt*cv::Vec3d(xd[2], yd[2], 1);
+            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
+            u = fx*invProj*vecTilt(0) + u0;
+            v = fy*invProj*vecTilt(1) + v0;
+            m1f[j*2+4] = (float)u;
+            m1f[j*2+5] = (float)v;
+
+            vecTilt = matTilt*cv::Vec3d(xd[3], yd[3], 1);
+            invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
+            u = fx*invProj*vecTilt(0) + u0;
+            v = fy*invProj*vecTilt(1) + v0;
+            m1f[j*2+6] = (float)u;
+            m1f[j*2+7] = (float)v;
+        }
+}
+#endif
+        for( ; j < size.width; j++, _x += ir[0], _y += ir[3], _w += ir[6] )
         {
             double w = 1./_w, x = _x*w, y = _y*w;
             double x2 = x*x, y2 = y*y;
             double r2 = x2 + y2, _2xy = 2*x*y;
-            double kr = (1 + ((k3*r2 + k2)*r2 + k1)*r2)/(1 + ((k6*r2 + k5)*r2 + k4)*r2);
-            double xd = (x*kr + p1*_2xy + p2*(r2 + 2*x2) + s1*r2+s2*r2*r2);
-            double yd = (y*kr + p1*(r2 + 2*y2) + p2*_2xy + s3*r2+s4*r2*r2);
+            double kr = (1 + ((k3*r2 + k2)*r2 + k1)*r2) / (1 + ((k6*r2 + k5)*r2 + k4)*r2);
+            double xd = (x*kr + p1*_2xy + p2*(r2 + 2*x2) + s1*r2 + s2*r2*r2);
+            double yd = (y*kr + p1*(r2 + 2*y2) + p2*_2xy + s3*r2 + s4*r2*r2);
             cv::Vec3d vecTilt = matTilt*cv::Vec3d(xd, yd, 1);
             double invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
             double u = fx*invProj*vecTilt(0) + u0;
