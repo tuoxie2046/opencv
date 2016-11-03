@@ -1444,6 +1444,17 @@ struct RowVec_32f
         for( ; i <= width - 8; i += 8 )
         {
             const float* src = src0 + i;
+#if CV_AVX2
+            __m256 f, x0;
+            __m256 s0 = _mm256_set1_ps(0.0f);
+            for( k = 0; k < _ksize; k++, src += cn )
+            {
+                f = _mm256_set1_ps(_kx[k]);
+                x0 = _mm256_loadu_ps(src);
+                s0 = _mm256_add_ps(s0, _mm256_mul_ps(x0, f));
+            }
+            _mm256_storeu_ps(dst + i, s0);
+#else
             __m128 f, s0 = _mm_setzero_ps(), s1 = s0, x0, x1;
             for( k = 0; k < _ksize; k++, src += cn )
             {
@@ -1457,6 +1468,7 @@ struct RowVec_32f
             }
             _mm_store_ps(dst + i, s0);
             _mm_store_ps(dst + i + 4, s1);
+#endif
         }
         return i;
     }
@@ -1721,11 +1733,38 @@ struct SymmColumnVec_32f
         const float *S, *S2;
         float* dst = (float*)_dst;
         __m128 d4 = _mm_set1_ps(delta);
+#if CV_AVX2
+        __m256 d8 = _mm256_set1_ps(delta);
+#endif
 
         if( symmetrical )
         {
             for( ; i <= width - 16; i += 16 )
             {
+#if CV_AVX2
+                __m256 f = _mm256_set1_ps(ky[0]);
+                __m256 s0, s1;
+                __m256 x0;
+                S = src[0] + i;
+                s0 = _mm256_loadu_ps(S);
+                s0 = _mm256_add_ps(_mm256_mul_ps(s0, f), d8);
+                s1 = _mm256_loadu_ps(S+8);
+                s1 = _mm256_add_ps(_mm256_mul_ps(s1, f), d8);
+
+                for( k = 1; k <= ksize2; k++ )
+                {
+                    S = src[k] + i;
+                    S2 = src[-k] + i;
+                    f = _mm256_set1_ps(ky[k]);
+                    x0 = _mm256_add_ps(_mm256_loadu_ps(S), _mm256_loadu_ps(S2));
+                    s0 = _mm256_add_ps(s0, _mm256_mul_ps(x0, f));
+                    x0 = _mm256_add_ps(_mm256_loadu_ps(S+8), _mm256_loadu_ps(S2+8));
+                    s1 = _mm256_add_ps(s1, _mm256_mul_ps(x0, f));
+                }
+
+                _mm256_storeu_ps(dst + i, s0);
+                _mm256_storeu_ps(dst + i + 8, s1);
+#else
                 __m128 f = _mm_load_ss(ky);
                 f = _mm_shuffle_ps(f, f, 0);
                 __m128 s0, s1, s2, s3;
@@ -1760,6 +1799,7 @@ struct SymmColumnVec_32f
                 _mm_storeu_ps(dst + i + 4, s1);
                 _mm_storeu_ps(dst + i + 8, s2);
                 _mm_storeu_ps(dst + i + 12, s3);
+#endif
             }
 
             for( ; i <= width - 4; i += 4 )
@@ -1786,6 +1826,25 @@ struct SymmColumnVec_32f
         {
             for( ; i <= width - 16; i += 16 )
             {
+#if CV_AVX2
+                __m256 f, s0 = d8, s1 = d8;
+                __m256 x0;
+                S = src[0] + i;
+
+                for( k = 1; k <= ksize2; k++ )
+                {
+                    S = src[k] + i;
+                    S2 = src[-k] + i;
+                    f = _mm256_set1_ps(ky[k]);
+                    x0 = _mm256_sub_ps(_mm256_loadu_ps(S), _mm256_loadu_ps(S2));
+                    s0 = _mm256_add_ps(s0, _mm256_mul_ps(x0, f));
+                    x0 = _mm256_sub_ps(_mm256_loadu_ps(S+8), _mm256_loadu_ps(S2+8));
+                    s1 = _mm256_add_ps(s1, _mm256_mul_ps(x0, f));
+                }
+
+                _mm256_storeu_ps(dst + i, s0);
+                _mm256_storeu_ps(dst + i + 8, s1);
+#else
                 __m128 f, s0 = d4, s1 = d4, s2 = d4, s3 = d4;
                 __m128 x0, x1;
                 S = src[0] + i;
@@ -1810,6 +1869,7 @@ struct SymmColumnVec_32f
                 _mm_storeu_ps(dst + i + 4, s1);
                 _mm_storeu_ps(dst + i + 8, s2);
                 _mm_storeu_ps(dst + i + 12, s3);
+#endif
             }
 
             for( ; i <= width - 4; i += 4 )
