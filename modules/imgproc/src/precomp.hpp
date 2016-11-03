@@ -96,4 +96,9 @@ extern const float icv8x32fSqrTab[];
 
 #include "opencv2/core/sse_utils.hpp"
 
+#define USE_SSE2  (cv::checkHardwareSupport(CV_CPU_SSE))
+#define USE_SSE4_2  (cv::checkHardwareSupport(CV_CPU_SSE4_2))
+#define USE_AVX  (cv::checkHardwareSupport(CV_CPU_AVX))
+#define USE_AVX2  (cv::checkHardwareSupport(CV_CPU_AVX2))
+
 #endif /*__OPENCV_CV_INTERNAL_H_*/

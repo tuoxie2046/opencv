@@ -144,14 +144,87 @@ void cv::initUndistortRectifyMap( InputArray _cameraMatrix, InputArray _distCoef
         ushort* m2 = (ushort*)m2f;
         double _x = i*ir[1] + ir[2], _y = i*ir[4] + ir[5], _w = i*ir[7] + ir[8];
 
-        for( int j = 0; j < size.width; j++, _x += ir[0], _y += ir[3], _w += ir[6] )
+        int j = 0;
+#if CV_AVX2
+if( USE_AVX2 )
+{
+        __m256d __one = _mm256_set1_pd(1.0);
+        __m256d __two = _mm256_set1_pd(2.0);
+        double CV_DECL_ALIGNED(32) xdv[4];
+        double CV_DECL_ALIGNED(32) ydv[4];
+        for( ; j < size.width; j += 4, _x += 4 * ir[0], _y += 4 * ir[3], _w += 4 * ir[6] )
+        {
+            // Question: Should we load the constants first?
+            __m256d w = _mm256_div_pd(__one, _mm256_set_pd(_w + 3 * ir[6], _w + 2 * ir[6], _w + ir[6], _w));
+            __m256d x = _mm256_mul_pd(_mm256_set_pd(_x + 3 * ir[0], _x + 2 * ir[0], _x + ir[0], _x), w);
+            __m256d y = _mm256_mul_pd(_mm256_set_pd(_y + 3 * ir[3], _y + 2 * ir[3], _y + ir[3], _y), w);
+            __m256d x2 = _mm256_mul_pd(x, x);
+            __m256d y2 = _mm256_mul_pd(y, y);
+            __m256d r2 = _mm256_add_pd(x2, y2);
+            __m256d _2xy = _mm256_mul_pd(__two, _mm256_mul_pd(x, y));
+            __m256d kr = _mm256_div_pd(
+                _mm256_add_pd(__one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(k3), r2), _mm256_set1_pd(k2)), r2), _mm256_set1_pd(k1)), r2)),
+                _mm256_add_pd(__one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(k6), r2), _mm256_set1_pd(k5)), r2), _mm256_set1_pd(k4)), r2))
+            );
+            __m256d r22 = _mm256_mul_pd(r2, r2);
+            __m256d xd = _mm256_add_pd(
+                _mm256_mul_pd(x, kr),
+                _mm256_add_pd(
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(p1), _2xy),
+                        _mm256_mul_pd(_mm256_set1_pd(p2), _mm256_add_pd(r2, _mm256_mul_pd(__two, x2)))),
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(s1), r2),
+                        _mm256_mul_pd(_mm256_set1_pd(s2), r22))));
+            __m256d yd = _mm256_add_pd(
+                _mm256_mul_pd(y, kr),
+                _mm256_add_pd(
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(p1), _mm256_add_pd(r2, _mm256_mul_pd(__two, y2))),
+                        _mm256_mul_pd(_mm256_set1_pd(p2), _2xy)),
+                    _mm256_add_pd(
+                        _mm256_mul_pd(_mm256_set1_pd(s3), r2),
+                        _mm256_mul_pd(_mm256_set1_pd(s4), r22))));
+
+            // I have no idea how to parallelize this
+            _mm256_store_pd(xdv, xd);
+            _mm256_store_pd(ydv, yd);
+
+            for (int a = 0; a < 4; ++a) {
+                cv::Vec3d vecTilt = matTilt * cv::Vec3d(xdv[a], ydv[a], 1);
+                double invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
+                double u = fx*invProj*vecTilt(0) + u0;
+                double v = fy*invProj*vecTilt(1) + v0;
+                if( m1type == CV_16SC2 )
+                {
+                    int iu = saturate_cast<int>(u*INTER_TAB_SIZE);
+                    int iv = saturate_cast<int>(v*INTER_TAB_SIZE);
+                    m1[(j+a)*2] = (short)(iu >> INTER_BITS);
+                    m1[(j+a)*2+1] = (short)(iv >> INTER_BITS);
+                    m2[j+a] = (ushort)((iv & (INTER_TAB_SIZE-1))*INTER_TAB_SIZE + (iu & (INTER_TAB_SIZE-1)));
+                }
+                else if( m1type == CV_32FC1 )
+                {
+                    m1f[j+a] = (float)u;
+                    m2f[j+a] = (float)v;
+                }
+                else
+                {
+                    m1f[(j+a)*2] = (float)u;
+                    m1f[(j+a)*2+1] = (float)v;
+                }
+            }
+        }
+}
+#endif
+        for( ; j < size.width; j++, _x += ir[0], _y += ir[3], _w += ir[6] )
         {
             double w = 1./_w, x = _x*w, y = _y*w;
             double x2 = x*x, y2 = y*y;
             double r2 = x2 + y2, _2xy = 2*x*y;
-            double kr = (1 + ((k3*r2 + k2)*r2 + k1)*r2)/(1 + ((k6*r2 + k5)*r2 + k4)*r2);
-            double xd = (x*kr + p1*_2xy + p2*(r2 + 2*x2) + s1*r2+s2*r2*r2);
-            double yd = (y*kr + p1*(r2 + 2*y2) + p2*_2xy + s3*r2+s4*r2*r2);
+            double kr = (1 + ((k3*r2 + k2)*r2 + k1)*r2) / (1 + ((k6*r2 + k5)*r2 + k4)*r2);
+            double xd = (x*kr + p1*_2xy + p2*(r2 + 2*x2) + s1*r2 + s2*r2*r2);
+            double yd = (y*kr + p1*(r2 + 2*y2) + p2*_2xy + s3*r2 + s4*r2*r2);
             cv::Vec3d vecTilt = matTilt*cv::Vec3d(xd, yd, 1);
             double invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
             double u = fx*invProj*vecTilt(0) + u0;
@@ -177,7 +250,6 @@ void cv::initUndistortRectifyMap( InputArray _cameraMatrix, InputArray _distCoef
         }
     }
 }
-
 
 void cv::undistort( InputArray _src, OutputArray _dst, InputArray _cameraMatrix,
                     InputArray _distCoeffs, InputArray _newCameraMatrix )
