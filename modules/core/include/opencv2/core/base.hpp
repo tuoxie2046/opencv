@@ -514,8 +514,7 @@ _AccTp normL2Sqr(const _Tp* a, const _Tp* b, int n)
     return s;
 }
 
-template<> inline
-float normL2Sqr(const float* a, const float* b, int n)
+static inline float normL2Sqr(const float* a, const float* b, int n)
 {
     if( n >= 8 )
         return hal::normL2Sqr_(a, b, n);
