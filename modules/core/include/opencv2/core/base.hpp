@@ -54,6 +54,7 @@
 
 #include "opencv2/core/cvdef.h"
 #include "opencv2/core/cvstd.hpp"
+#include "opencv2/core/hal/hal.hpp"
 
 namespace cv
 {
@@ -513,9 +514,12 @@ _AccTp normL2Sqr(const _Tp* a, const _Tp* b, int n)
     return s;
 }
 
-static inline float normL2Sqr(const float* a, const float* b, int n)
+template<> inline
+float normL2Sqr(const float* a, const float* b, int n)
 {
-    float s = 0.f;
+    if( n >= 8 )
+        return hal::normL2Sqr_(a, b, n);
+    float s = 0;
     for( int i = 0; i < n; i++ )
     {
         float v = a[i] - b[i];
