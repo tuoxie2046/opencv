@@ -493,21 +493,21 @@ void exp32f( const float *_x, float *y, int n )
     if( n >= 8 )
     {
         static const __m256d prescale4 = _mm256_set1_pd(exp_prescale);
-        static const __m128 postscale4 = _mm_set1_ps((float)exp_postscale);
+        static const __m256 postscale8 = _mm256_set1_ps((float)exp_postscale);
         static const __m128 maxval4 = _mm_set1_ps((float)(exp_max_val/exp_prescale));
         static const __m128 minval4 = _mm_set1_ps((float)(-exp_max_val/exp_prescale));
 
-        static const __m128 mA1 = _mm_set1_ps(A1);
-        static const __m128 mA2 = _mm_set1_ps(A2);
-        static const __m128 mA3 = _mm_set1_ps(A3);
-        static const __m128 mA4 = _mm_set1_ps(A4);
+        static const __m256 mA1 = _mm256_set1_ps(A1);
+        static const __m256 mA2 = _mm256_set1_ps(A2);
+        static const __m256 mA3 = _mm256_set1_ps(A3);
+        static const __m256 mA4 = _mm256_set1_ps(A4);
         bool y_aligned = (size_t)(void*)y % 32 == 0;
 
         ushort CV_DECL_ALIGNED(32) tab_idx[16];
 
         for( ; i <= n - 8; i += 8 )
         {
-            __m128 xf0, xf1;
+            __m256 xf;
             __m128i xi0, xi1;
 
             __m256d xd0 = _mm256_cvtps_pd(_mm_min_ps(_mm_max_ps(_mm_loadu_ps(&x[i].f), minval4), maxval4));
@@ -522,11 +522,12 @@ void exp32f( const float *_x, float *y, int n )
             xd0 = _mm256_sub_pd(xd0, _mm256_cvtepi32_pd(xi0));
             xd1 = _mm256_sub_pd(xd1, _mm256_cvtepi32_pd(xi1));
 
-            xf0 = _mm256_cvtpd_ps(xd0);
-            xf1 = _mm256_cvtpd_ps(xd1);
+            // gcc does not support _mm256_set_m128
+            //xf = _mm256_set_m128(_mm256_cvtpd_ps(xd1), _mm256_cvtpd_ps(xd0));
+            xf = _mm256_insertf128_ps(xf, _mm256_cvtpd_ps(xd0), 0);
+            xf = _mm256_insertf128_ps(xf, _mm256_cvtpd_ps(xd1), 1);
 
-            xf0 = _mm_mul_ps(xf0, postscale4);
-            xf1 = _mm_mul_ps(xf1, postscale4);
+            xf = _mm256_mul_ps(xf, postscale8);
 
             xi0 = _mm_packs_epi32(xi0, xi1);
 
@@ -541,46 +542,39 @@ void exp32f( const float *_x, float *y, int n )
             __m256d yd0 = _mm256_set_pd(expTab[tab_idx[3]], expTab[tab_idx[2]], expTab[tab_idx[1]], expTab[tab_idx[0]]);
             __m256d yd1 = _mm256_set_pd(expTab[tab_idx[7]], expTab[tab_idx[6]], expTab[tab_idx[5]], expTab[tab_idx[4]]);
 
-            __m128 yf0 = _mm256_cvtpd_ps(yd0);
-            __m128 yf1 = _mm256_cvtpd_ps(yd1);
+            // gcc does not support _mm256_set_m128
+            //__m256 yf = _mm256_set_m128(_mm256_cvtpd_ps(yd1), _mm256_cvtpd_ps(yd0));
+            __m256 yf;
+            yf = _mm256_insertf128_ps(yf, _mm256_cvtpd_ps(yd0), 0);
+            yf = _mm256_insertf128_ps(yf, _mm256_cvtpd_ps(yd1), 1);
 
-            yf0 = _mm_mul_ps(yf0, _mm_castsi128_ps(_mm_slli_epi32(xi0, 23)));
-            yf1 = _mm_mul_ps(yf1, _mm_castsi128_ps(_mm_slli_epi32(xi1, 23)));
+            //_mm256_set_m128i(xi1, xi0)
+            __m256i temp;
+            temp = _mm256_inserti128_si256(temp, xi0, 0);
+            temp = _mm256_inserti128_si256(temp, xi1, 1);
 
-            __m128 zf0 = _mm_add_ps(xf0, mA1);
-            __m128 zf1 = _mm_add_ps(xf1, mA1);
+            yf = _mm256_mul_ps(yf, _mm256_castsi256_ps(_mm256_slli_epi32(temp, 23)));
+
+            __m256 zf = _mm256_add_ps(xf, mA1);
 
 #if CV_FMA3
-            zf0 = _mm_fmadd_ps(zf0, xf0, mA2);
-            zf1 = _mm_fmadd_ps(zf1, xf1, mA2);
-
-            zf0 = _mm_fmadd_ps(zf0, xf0, mA3);
-            zf1 = _mm_fmadd_ps(zf1, xf1, mA3);
-
-            zf0 = _mm_fmadd_ps(zf0, xf0, mA4);
-            zf1 = _mm_fmadd_ps(zf1, xf1, mA4);
+            zf = _mm256_fmadd_ps(zf, xf, mA2);
+            zf = _mm256_fmadd_ps(zf, xf, mA3);
+            zf = _mm256_fmadd_ps(zf, xf, mA4);
 #else
-            zf0 = _mm_add_ps(_mm_mul_ps(zf0, xf0), mA2);
-            zf1 = _mm_add_ps(_mm_mul_ps(zf1, xf1), mA2);
-
-            zf0 = _mm_add_ps(_mm_mul_ps(zf0, xf0), mA3);
-            zf1 = _mm_add_ps(_mm_mul_ps(zf1, xf1), mA3);
-
-            zf0 = _mm_add_ps(_mm_mul_ps(zf0, xf0), mA4);
-            zf1 = _mm_add_ps(_mm_mul_ps(zf1, xf1), mA4);
+            zf = _mm256_add_ps(_mm256_mul_ps(zf, xf), mA2);
+            zf = _mm256_add_ps(_mm256_mul_ps(zf, xf), mA3);
+            zf = _mm256_add_ps(_mm256_mul_ps(zf, xf), mA4);
 #endif
-            zf0 = _mm_mul_ps(zf0, yf0);
-            zf1 = _mm_mul_ps(zf1, yf1);
+            zf = _mm256_mul_ps(zf, yf);
 
             if( y_aligned )
             {
-                _mm_store_ps(y + i, zf0);
-                _mm_store_ps(y + i + 4, zf1);
+                _mm256_store_ps(y + i, zf);
             }
             else
             {
-                _mm_storeu_ps(y + i, zf0);
-                _mm_storeu_ps(y + i + 4, zf1);
+                _mm256_storeu_ps(y + i, zf);
             }
         }
     }
