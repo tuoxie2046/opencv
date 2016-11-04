@@ -1836,7 +1836,11 @@ struct SymmColumnVec_32f
                     S = src[k] + i;
                     S2 = src[-k] + i;
                     x0 = _mm_add_ps(_mm_load_ps(src[k]+i), _mm_load_ps(src[-k] + i));
+#if CV_FMA3
+                    s0 = _mm_fmadd_ps(x0, f, s0);
+#else
                     s0 = _mm_add_ps(s0, _mm_mul_ps(x0, f));
+#endif
                 }
 
                 _mm_storeu_ps(dst + i, s0);
@@ -1909,7 +1913,11 @@ struct SymmColumnVec_32f
                     f = _mm_load_ss(ky+k);
                     f = _mm_shuffle_ps(f, f, 0);
                     x0 = _mm_sub_ps(_mm_load_ps(src[k]+i), _mm_load_ps(src[-k] + i));
+#if CV_FMA3
+                    s0 = _mm_fmadd_ps(x0, f, s0);
+#else
                     s0 = _mm_add_ps(s0, _mm_mul_ps(x0, f));
+#endif
                 }
 
                 _mm_storeu_ps(dst + i, s0);
