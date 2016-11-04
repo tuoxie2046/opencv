@@ -1451,7 +1451,11 @@ struct RowVec_32f
             {
                 f = _mm256_set1_ps(_kx[k]);
                 x0 = _mm256_loadu_ps(src);
+#if CV_FMA3
+                s0 = _mm256_fmadd_ps(x0, f, s0);
+#else
                 s0 = _mm256_add_ps(s0, _mm256_mul_ps(x0, f));
+#endif
             }
             _mm256_storeu_ps(dst + i, s0);
 #else
@@ -1747,9 +1751,17 @@ struct SymmColumnVec_32f
                 __m256 x0;
                 S = src[0] + i;
                 s0 = _mm256_loadu_ps(S);
+#if CV_FMA3
+                s0 = _mm256_fmadd_ps(s0, f, d8);
+#else
                 s0 = _mm256_add_ps(_mm256_mul_ps(s0, f), d8);
+#endif
                 s1 = _mm256_loadu_ps(S+8);
+#if CV_FMA3
+                s1 = _mm256_fmadd_ps(s1, f, d8);
+#else
                 s1 = _mm256_add_ps(_mm256_mul_ps(s1, f), d8);
+#endif
 
                 for( k = 1; k <= ksize2; k++ )
                 {
@@ -1757,9 +1769,17 @@ struct SymmColumnVec_32f
                     S2 = src[-k] + i;
                     f = _mm256_set1_ps(ky[k]);
                     x0 = _mm256_add_ps(_mm256_loadu_ps(S), _mm256_loadu_ps(S2));
+#if CV_FMA3
+                    s0 = _mm256_fmadd_ps(x0, f, s0);
+#else
                     s0 = _mm256_add_ps(s0, _mm256_mul_ps(x0, f));
+#endif
                     x0 = _mm256_add_ps(_mm256_loadu_ps(S+8), _mm256_loadu_ps(S2+8));
+#if CV_FMA3
+                    s1 = _mm256_fmadd_ps(x0, f, s1);
+#else
                     s1 = _mm256_add_ps(s1, _mm256_mul_ps(x0, f));
+#endif
                 }
 
                 _mm256_storeu_ps(dst + i, s0);
@@ -1837,9 +1857,17 @@ struct SymmColumnVec_32f
                     S2 = src[-k] + i;
                     f = _mm256_set1_ps(ky[k]);
                     x0 = _mm256_sub_ps(_mm256_loadu_ps(S), _mm256_loadu_ps(S2));
+#if CV_FMA3
+                    s0 = _mm256_fmadd_ps(x0, f, s0);
+#else
                     s0 = _mm256_add_ps(s0, _mm256_mul_ps(x0, f));
+#endif
                     x0 = _mm256_sub_ps(_mm256_loadu_ps(S+8), _mm256_loadu_ps(S2+8));
+#if CV_FMA3
+                    s1 = _mm256_fmadd_ps(x0, f, s1);
+#else
                     s1 = _mm256_add_ps(s1, _mm256_mul_ps(x0, f));
+#endif
                 }
 
                 _mm256_storeu_ps(dst + i, s0);
