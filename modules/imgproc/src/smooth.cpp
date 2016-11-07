@@ -1686,7 +1686,7 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
             sigma1 == sigma2 && ksize.width == ksize.height && sigma1 != 0.0 )
     {
         IppiBorderType ippBorder = ippiGetBorderType(borderType);
-        if (ippBorderConst == ippBorder || ippBorderRepl == ippBorder)
+        if (ippBorderConst == ippBorder || ippBorderRepl == ippBorder || ippBorderMirror == ippBorder )
         {
             Mat src = _src.getMat(), dst = _dst.getMat();
             IppiSize roiSize = { src.cols, src.rows };
@@ -1740,7 +1740,6 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
 
                     if(status >= 0)
                         return true;
-
 #undef IPP_FILTER_GAUSS_C1
 #undef IPP_FILTER_GAUSS_CN
                 }
@@ -1784,6 +1783,19 @@ void cv::GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
     if(sigma1 == 0 && sigma2 == 0 && tegra::useTegra() && tegra::gaussian(src, dst, ksize, borderType))
         return;
 #endif
+
+    int depth = CV_MAT_DEPTH(type);
+    if( sigma2 <= 0 )
+        sigma2 = sigma1;
+
+    // automatic detection of kernel size from sigma
+    if( ksize.width <= 0 && sigma1 > 0 )
+        ksize.width = cvRound(sigma1*(depth == CV_8U ? 3 : 4)*2 + 1)|1;
+    if( ksize.height <= 0 && sigma2 > 0 )
+        ksize.height = cvRound(sigma2*(depth == CV_8U ? 3 : 4)*2 + 1)|1;
+
+    CV_Assert( ksize.width > 0 && ksize.width % 2 == 1 &&
+        ksize.height > 0 && ksize.height % 2 == 1 );
 
     CV_IPP_RUN(true, ipp_GaussianBlur( _src,  _dst,  ksize, sigma1,  sigma2, borderType));
 
