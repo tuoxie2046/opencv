@@ -4147,8 +4147,13 @@ float normL2Sqr_(const float* a, const float* b, int n)
     {
         __m256 t0 = _mm256_sub_ps(_mm256_loadu_ps(a + j), _mm256_loadu_ps(b + j));
         __m256 t1 = _mm256_sub_ps(_mm256_loadu_ps(a + j + 8), _mm256_loadu_ps(b + j + 8));
+#ifdef CV_FMA3
+        d0 = _mm256_fmadd_ps(t0, t0, d0);
+        d1 = _mm256_fmadd_ps(t1, t1, d1);
+#else
         d0 = _mm256_add_ps(d0, _mm256_mul_ps(t0, t0));
         d1 = _mm256_add_ps(d1, _mm256_mul_ps(t1, t1));
+#endif
     }
     _mm256_store_ps(buf, _mm256_add_ps(d0, d1));
     d = buf[0] + buf[1] + buf[2] + buf[3] + buf[4] + buf[5] + buf[6] + buf[7];
