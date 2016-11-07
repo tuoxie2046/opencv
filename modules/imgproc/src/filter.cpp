@@ -3187,7 +3187,7 @@ template<typename ST, typename DT, class VecOp> struct RowFilter : public BaseRo
 
         i = vecOp(src, dst, width, cn);
         width *= cn;
-#if CV_ENABLE_UNROLLED
+        #if CV_ENABLE_UNROLLED
         for( ; i <= width - 4; i += 4 )
         {
             S = (const ST*)src + i;
@@ -3205,7 +3205,7 @@ template<typename ST, typename DT, class VecOp> struct RowFilter : public BaseRo
             D[i] = s0; D[i+1] = s1;
             D[i+2] = s2; D[i+3] = s3;
         }
-#endif
+        #endif
         for( ; i < width; i++ )
         {
             S = (const ST*)src + i;
@@ -3222,65 +3222,6 @@ template<typename ST, typename DT, class VecOp> struct RowFilter : public BaseRo
     Mat kernel;
     VecOp vecOp;
 };
-
-template<>
-void RowFilter<float, float, RowVec_32f>::operator()(const uchar* src, uchar* dst, int width, int cn)
-{
-    int _ksize = ksize;
-    const float *kx = kernel.ptr<float>();
-    const float *S;
-    float *D = (float*)dst;
-    int i, k;
-
-    i = vecOp(src, dst, width, cn);
-    width *= cn;
-#if CV_AVX2
-    for( ; i <= width - 8; i += 8 )
-    {
-        S = (const float*)src + i;
-        __m256 __s = _mm256_setzero_ps();
-        for( k = 0; k < _ksize; k++, S += cn )
-        {
-#if CV_FMA3
-            __s = _mm256_fmadd_ps(_mm256_set1_ps(kx[k]), _mm256_loadu_ps(S), __s);
-#else
-            __s = _mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps(kx[k]), _mm256_loadu_ps(S)), __s);
-#endif
-        }
-
-        _mm256_storeu_ps(&D[i], __s);
-    }
-#elif CV_ENABLE_UNROLLED
-    for( ; i <= width - 4; i += 4 )
-    {
-        S = (const float*)src + i;
-        float f = kx[0];
-        float s0 = f*S[0], s1 = f*S[1], s2 = f*S[2], s3 = f*S[3];
-
-        for( k = 1; k < _ksize; k++ )
-        {
-            S += cn;
-            f = kx[k];
-            s0 += f*S[0]; s1 += f*S[1];
-            s2 += f*S[2]; s3 += f*S[3];
-        }
-
-        D[i] = s0; D[i+1] = s1;
-        D[i+2] = s2; D[i+3] = s3;
-    }
-#endif
-    for( ; i < width; i++ )
-    {
-        S = (const float*)src + i;
-        float s0 = kx[0]*S[0];
-        for( k = 1; k < _ksize; k++ )
-        {
-            S += cn;
-            s0 += kx[k]*S[0];
-        }
-        D[i] = s0;
-    }
-}
 
 
 template<typename ST, typename DT, class VecOp> struct SymmRowSmallFilter :
