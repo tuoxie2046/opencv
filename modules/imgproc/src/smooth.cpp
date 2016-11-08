@@ -1664,6 +1664,149 @@ cv::Ptr<cv::FilterEngine> cv::createGaussianFilter( int type, Size ksize,
 #ifdef HAVE_IPP
 namespace cv
 {
+
+class ipp_GaussianBlur_computer : public ParallelLoopBody
+{
+public:
+    ipp_GaussianBlur_computer(
+            InputArray __src,
+            OutputArray __dst,
+            Ipp32u _ksize,
+            Ipp32f _sigma,
+            IppiBorderType _ippBorder,
+            IppDataType _dataType,
+            int _numChannels,
+            size_t _typeSize)
+        : _src(__src),
+          _dst(__dst),
+          ksize(_ksize),
+          sigma(_sigma),
+          ippBorder(_ippBorder),
+          dataType(_dataType),
+          numChannels(_numChannels),
+          typeSize(_typeSize) { }
+
+    void operator()( const cv::Range& range ) const
+    {
+        const int begin = range.start;
+        const int end = range.end;
+
+        CV_Assert(end <= 4 && "Only 4 threads are supported");
+
+        Mat src = _src.getMat();
+        Mat dst = _dst.getMat();
+
+        int type = _src.type();
+        for ( int i = begin; i<end; i++ )
+        {
+            const int idx = i & 1;
+            const int idy = i >> 1;
+
+            const size_t roiWidth = (src.cols >> 1) + (src.cols & idx);
+            const size_t roiHeight = (src.rows >> 1) + (src.rows & idy);
+            const IppiSize roiSize = { roiWidth, roiHeight };
+
+            IppiBorderType tIppBorder = ippBorder;
+
+            if (idy == 0) {
+                tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemBottom));
+            } else {
+                tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemTop));
+            }
+            if (idx == 0) {
+                tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemRight));
+            } else {
+                tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemLeft));
+            }
+
+            Ipp32s specSize = 0, bufferSize = 0;
+
+            if (ippiFilterGaussianGetBufferSize(roiSize, ksize, dataType, numChannels, &specSize, &bufferSize) >= 0)
+            {
+                IppAutoBuffer<IppFilterGaussianSpec> spec(specSize);
+                IppAutoBuffer<Ipp8u> buffer(bufferSize);
+
+                if (ippiFilterGaussianInit(roiSize, ksize, sigma, tIppBorder, dataType, numChannels, spec, buffer) >= 0)
+                {
+                    // In bytes
+                    const size_t src_offset = idy * (src.rows >> 1) * src.step + idx * (src.cols >> 1) * typeSize;
+                    const size_t dst_offset = idy * (src.rows >> 1) * dst.step + idx * (src.cols >> 1) * typeSize;
+
+                    #define IPP_FILTER_GAUSS_C1(ippfavor) \
+                        { \
+                            Ipp##ippfavor borderValues = 0; \
+                            status = ippiFilterGaussianBorder_##ippfavor##_C1R( \
+                                    reinterpret_cast<Ipp##ippfavor *>(reinterpret_cast<uintptr_t>(src.ptr<Ipp##ippfavor>()) + src_offset), \
+                                    (int)src.step, \
+                                    reinterpret_cast<Ipp##ippfavor *>(reinterpret_cast<uintptr_t>(dst.ptr<Ipp##ippfavor>()) + dst_offset), \
+                                    (int)dst.step, roiSize, borderValues, spec, buffer); \
+                        }
+
+                    #define IPP_FILTER_GAUSS_CN(ippfavor, ippcn) \
+                        { \
+                            Ipp##ippfavor borderValues[] = { 0, 0, 0 }; \
+                            status = ippiFilterGaussianBorder_##ippfavor##_C##ippcn##R( \
+                                    reinterpret_cast<Ipp##ippfavor *>(reinterpret_cast<uintptr_t>(src.ptr<Ipp##ippfavor>()) + src_offset), \
+                                    (int)src.step, \
+                                    reinterpret_cast<Ipp##ippfavor *>(reinterpret_cast<uintptr_t>(dst.ptr<Ipp##ippfavor>()) + dst_offset), \
+                                    (int)dst.step, roiSize, borderValues, spec, buffer); \
+                        }
+
+                        IppStatus status = ippStsErr;
+#if !HAVE_ICV
+#if IPP_VERSION_X100 > 900 // Buffer overflow may happen in IPP 9.0.0 and less
+                        if (type == CV_8UC1) {
+                            IPP_FILTER_GAUSS_C1(8u)
+                        }
+                        else
+#endif
+                        if (type == CV_8UC3) {
+                            IPP_FILTER_GAUSS_CN(8u, 3)
+                        }
+                        else if (type == CV_16UC1) {
+                            IPP_FILTER_GAUSS_C1(16u)
+                        }
+                        else if (type == CV_16UC3) {
+                            IPP_FILTER_GAUSS_CN(16u, 3)
+                        }
+                        else if (type == CV_16SC1) {
+                            IPP_FILTER_GAUSS_C1(16s)
+                        }
+                        else if (type == CV_16SC3) {
+                            IPP_FILTER_GAUSS_CN(16s, 3)
+                        }
+                        else if (type == CV_32FC3) {
+                            IPP_FILTER_GAUSS_CN(32f, 3)
+                        }
+                        else
+#endif
+                        if (type == CV_32FC1) {
+                            IPP_FILTER_GAUSS_C1(32f)
+                        }
+
+                        if(status >= 0)
+                            continue;
+                    #undef IPP_FILTER_GAUSS_C1
+                    #undef IPP_FILTER_GAUSS_CN
+
+                }
+            }
+
+        }
+    }
+
+private:
+    InputArray _src;
+    OutputArray _dst;
+    Ipp32u ksize;
+    Ipp32f sigma;
+    IppiBorderType ippBorder;
+    IppDataType dataType;
+    int numChannels;
+    size_t typeSize;
+};
+
+
 static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
                    double sigma1, double sigma2,
                    int borderType )
@@ -1688,10 +1831,27 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
         IppiBorderType ippBorder = ippiGetBorderType(borderType);
         if (ippBorderConst == ippBorder || ippBorderRepl == ippBorder || ippBorderMirror == ippBorder )
         {
-            Mat src = _src.getMat(), dst = _dst.getMat();
-            IppiSize roiSize = { src.cols, src.rows };
             IppDataType dataType = ippiGetDataType(depth);
             Ipp32s specSize = 0, bufferSize = 0;
+
+            Mat src = _src.getMat(), dst = _dst.getMat();
+
+            // If image is small, overhead of multithreading > performance gain
+            // Splitting image in half in each dimension
+            if (getNumThreads() >= 4 && src.cols >= 512 && src.rows >= 512) {
+                parallel_for_(Range(0, 4), ipp_GaussianBlur_computer(
+                        _src,
+                        _dst,
+                        ksize.width,
+                        sigma1,
+                        ippBorder,
+                        dataType,
+                        cn,
+                        CV_ELEM_SIZE(type)));
+                return true;
+            }
+
+            IppiSize roiSize = { src.cols, src.rows };
 
             if (ippiFilterGaussianGetBufferSize(roiSize, (Ipp32u)ksize.width, dataType, cn, &specSize, &bufferSize) >= 0)
             {
