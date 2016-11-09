@@ -1788,7 +1788,6 @@ public:
                             continue;
                     #undef IPP_FILTER_GAUSS_C1
                     #undef IPP_FILTER_GAUSS_CN
-
                 }
             }
 
@@ -1836,9 +1835,30 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
 
             Mat src = _src.getMat(), dst = _dst.getMat();
 
+            if (src.isSubmatrix() && ippBorderMirror == ippBorder) {
+                Size orgSize;
+                Point offset;
+                src.locateROI(orgSize, offset);
+
+                int pixelsNeeded = ksize.width >> 1;
+
+                if (offset.x >= pixelsNeeded) {
+                    ippBorder = static_cast<IppiBorderType>(static_cast<int>(ippBorder) | static_cast<int>(ippBorderInMemLeft));
+                }
+                if (offset.y >= pixelsNeeded) {
+                    ippBorder = static_cast<IppiBorderType>(static_cast<int>(ippBorder) | static_cast<int>(ippBorderInMemTop));
+                }
+                if (offset.x + src.cols + pixelsNeeded <= orgSize.width) {
+                    ippBorder = static_cast<IppiBorderType>(static_cast<int>(ippBorder) | static_cast<int>(ippBorderInMemRight));
+                }
+                if (offset.y + src.rows + pixelsNeeded <= orgSize.height) {
+                    ippBorder = static_cast<IppiBorderType>(static_cast<int>(ippBorder) | static_cast<int>(ippBorderInMemBottom));
+                }
+            }
+
             // If image is small, overhead of multithreading > performance gain
             // Splitting image in half in each dimension
-            if (getNumThreads() >= 4 && src.cols >= 512 && src.rows >= 512) {
+            if (getNumThreads() >= 4 && src.cols >= 64 && src.rows >= 64) {
                 parallel_for_(Range(0, 4), ipp_GaussianBlur_computer(
                         _src,
                         _dst,
