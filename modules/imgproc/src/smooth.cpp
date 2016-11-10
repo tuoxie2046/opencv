@@ -1698,18 +1698,24 @@ public:
 
         int type = _src.type();
         const int blockHeight = src.rows / nBlocks;
+        const int blockRem = src.rows - nBlocks * blockHeight;
+
+        const int pixelsNeeded = ksize >> 1;
         for ( int i = begin; i<end; i++ )
         {
             const size_t roiWidth = src.cols;
-            const size_t roiHeight =  i == nBlocks - 1 ? src.rows - i * blockHeight : blockHeight;
+            // Evenly split the remainder among the threads
+            const size_t roiHeight = blockHeight + (i < blockRem);
             const IppiSize roiSize = { roiWidth, roiHeight };
+            const int roiY = i * blockHeight + std::min(i, blockRem);
 
             IppiBorderType tIppBorder = ippBorder;
 
-            if (i != 0) {
+            // TODO: Take original matrix into account if src is a submatrix
+            if (roiY >= pixelsNeeded) {
                 tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemTop));
             }
-            if (i != nBlocks - 1) {
+            if (roiY + roiHeight + pixelsNeeded <= src.rows - 1) {
                 tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemBottom));
             }
 
@@ -1723,8 +1729,8 @@ public:
                 if (ippiFilterGaussianInit(roiSize, ksize, sigma, tIppBorder, dataType, numChannels, spec, buffer) >= 0)
                 {
                     // In bytes
-                    const size_t src_offset = i * blockHeight * src.step;
-                    const size_t dst_offset = i * blockHeight * dst.step;
+                    const size_t src_offset = roiY * src.step;
+                    const size_t dst_offset = roiY * dst.step;
 
                     #define IPP_FILTER_GAUSS_C1(ippfavor) \
                         { \
@@ -1830,7 +1836,7 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
 
             Mat src = _src.getMat(), dst = _dst.getMat();
 
-            if (src.isSubmatrix() && ippBorderMirror == ippBorder) {
+            if (src.isSubmatrix()) {
                 Size orgSize;
                 Point offset;
                 src.locateROI(orgSize, offset);
@@ -1854,8 +1860,8 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
             // Need to cache getNumThreads(). Otherwise unexpected behavior
             // would occur if setNumThreads() is called while this function
             // under execution.
-            const int nThreads = getNumThreads();
-            if (nThreads > 1 && src.rows >= 16) {
+            const uint32_t nThreads = getNumThreads();
+            if (nThreads > 1 && static_cast<uint32_t>(src.rows) >= nThreads) {
                 parallel_for_(Range(0, nThreads), ipp_GaussianBlur_computer(
                         _src,
                         _dst,
