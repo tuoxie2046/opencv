@@ -163,10 +163,25 @@ if( USE_AVX2 )
             __m256d r2 = _mm256_add_pd(x2, y2);
             __m256d _2xy = _mm256_mul_pd(__two, _mm256_mul_pd(x, y));
             __m256d kr = _mm256_div_pd(
+#if CV_FMA3
+                _mm256_fmadd_pd(_mm256_fmadd_pd(_mm256_fmadd_pd(_mm256_set1_pd(k3), r2, _mm256_set1_pd(k2)), r2, _mm256_set1_pd(k1)), r2, __one),
+                _mm256_fmadd_pd(_mm256_fmadd_pd(_mm256_fmadd_pd(_mm256_set1_pd(k6), r2, _mm256_set1_pd(k5)), r2, _mm256_set1_pd(k4)), r2, __one)
+#else
                 _mm256_add_pd(__one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(k3), r2), _mm256_set1_pd(k2)), r2), _mm256_set1_pd(k1)), r2)),
                 _mm256_add_pd(__one, _mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(k6), r2), _mm256_set1_pd(k5)), r2), _mm256_set1_pd(k4)), r2))
+#endif
             );
             __m256d r22 = _mm256_mul_pd(r2, r2);
+#if CV_FMA3
+            __m256d xd = _mm256_fmadd_pd(x, kr,
+                _mm256_add_pd(
+                    _mm256_fmadd_pd(_mm256_set1_pd(p1), _2xy, _mm256_mul_pd(_mm256_set1_pd(p2), _mm256_fmadd_pd(__two, x2, r2))),
+                    _mm256_fmadd_pd(_mm256_set1_pd(s1), r2, _mm256_mul_pd(_mm256_set1_pd(s2), r22))));
+            __m256d yd = _mm256_fmadd_pd(y, kr,
+                _mm256_add_pd(
+                    _mm256_fmadd_pd(_mm256_set1_pd(p1), _mm256_fmadd_pd(__two, y2, r2), _mm256_mul_pd(_mm256_set1_pd(p2), _2xy)),
+                    _mm256_fmadd_pd(_mm256_set1_pd(s3), r2, _mm256_mul_pd(_mm256_set1_pd(s4), r22))));
+#else
             __m256d xd = _mm256_add_pd(
                 _mm256_mul_pd(x, kr),
                 _mm256_add_pd(
@@ -185,6 +200,7 @@ if( USE_AVX2 )
                     _mm256_add_pd(
                         _mm256_mul_pd(_mm256_set1_pd(s3), r2),
                         _mm256_mul_pd(_mm256_set1_pd(s4), r22))));
+#endif
 
             // I have no idea how to parallelize this
             _mm256_store_pd(xdv, xd);
