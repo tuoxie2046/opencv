@@ -1676,7 +1676,7 @@ public:
             IppiBorderType _ippBorder,
             IppDataType _dataType,
             int _numChannels,
-            size_t _typeSize,
+            int _offsetY,
             int _nBlocks)
         : _src(__src),
           _dst(__dst),
@@ -1685,7 +1685,7 @@ public:
           ippBorder(_ippBorder),
           dataType(_dataType),
           numChannels(_numChannels),
-          typeSize(_typeSize),
+          offsetY(_offsetY),
           nBlocks(_nBlocks) { }
 
     void operator()( const cv::Range& range ) const
@@ -1711,11 +1711,10 @@ public:
 
             IppiBorderType tIppBorder = ippBorder;
 
-            // TODO: Take original matrix into account if src is a submatrix
-            if (roiY >= pixelsNeeded) {
+            if (offsetY + roiY >= pixelsNeeded) {
                 tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemTop));
             }
-            if (roiY + roiHeight + pixelsNeeded <= static_cast<size_t>(src.rows - 1)) {
+            if (offsetY + roiY + roiHeight + pixelsNeeded <= static_cast<size_t>(src.rows - 1)) {
                 tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemBottom));
             }
 
@@ -1802,7 +1801,8 @@ private:
     IppiBorderType ippBorder;
     IppDataType dataType;
     int numChannels;
-    size_t typeSize;
+    // If src is a submatrix, offsetY is the offset of src in the original matrix
+    int offsetY;
     int nBlocks;
 };
 
@@ -1836,6 +1836,8 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
 
             Mat src = _src.getMat(), dst = _dst.getMat();
 
+            int offsetY = 0;
+
             if (src.isSubmatrix()) {
                 Size orgSize;
                 Point offset;
@@ -1855,13 +1857,17 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
                 if (offset.y + src.rows + pixelsNeeded <= orgSize.height) {
                     ippBorder = static_cast<IppiBorderType>(static_cast<int>(ippBorder) | static_cast<int>(ippBorderInMemBottom));
                 }
+
+                offsetY = offset.y;
             }
 
             // Need to cache getNumThreads(). Otherwise unexpected behavior
             // would occur if setNumThreads() is called while this function
             // under execution.
             const uint32_t nThreads = getNumThreads();
-            if (nThreads > 1 && static_cast<uint32_t>(src.rows) >= nThreads) {
+            if (nThreads > 1 &&
+                static_cast<uint32_t>(src.rows) >= nThreads &&
+                src.rows / nThreads >= static_cast<uint32_t>(ksize.width >> 1)) {
                 parallel_for_(Range(0, nThreads), ipp_GaussianBlur_computer(
                         _src,
                         _dst,
@@ -1870,7 +1876,7 @@ static bool ipp_GaussianBlur( InputArray _src, OutputArray _dst, Size ksize,
                         ippBorder,
                         dataType,
                         cn,
-                        CV_ELEM_SIZE(type),
+                        offsetY,
                         nThreads));
                 return true;
             }
