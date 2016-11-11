@@ -1715,7 +1715,7 @@ public:
             if (roiY >= pixelsNeeded) {
                 tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemTop));
             }
-            if (roiY + roiHeight + pixelsNeeded <= src.rows - 1) {
+            if (roiY + roiHeight + pixelsNeeded <= static_cast<size_t>(src.rows - 1)) {
                 tIppBorder = static_cast<IppiBorderType>(static_cast<int>(tIppBorder) | static_cast<int>(ippBorderInMemBottom));
             }
 
