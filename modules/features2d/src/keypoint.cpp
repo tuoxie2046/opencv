@@ -223,4 +223,31 @@ void KeyPointsFilter::removeDuplicated( std::vector<KeyPoint>& keypoints )
     keypoints.resize(j);
 }
 
+void KeyPointsFilter::removeDuplicatedSorted( std::vector<KeyPoint>& keypoints )
+{
+    int i, j, n = (int)keypoints.size();
+    std::vector<int> kpidx(n);
+    std::vector<uchar> mask(n, (uchar)1);
+
+    for( i = 0; i < n; i++ )
+        kpidx[i] = i;
+    std::sort(kpidx.begin(), kpidx.end(), KeyPoint_LessThan(keypoints));
+
+    for ( i = 1; j = 1; j < n; ++j ) {
+        KeyPoint& kp1 = keypoints[kpidx[j - 1]];
+        KeyPoint& kp2 = keypoints[kpidx[j]];
+        if( kp1.pt.x == kp2.pt.x && kp1.pt.y == kp2.pt.y &&
+            kp1.size == kp2.size && kp1.angle == kp2.angle ) {
+            ++j;
+        } else if (i + 1 != j) {
+            keypoints[i] = keypoints[j];
+            ++i;
+        } else {
+            ++i;
+        }
+    }
+
+    keypoints.resize(i);
+}
+
 }
