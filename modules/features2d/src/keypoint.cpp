@@ -226,28 +226,49 @@ void KeyPointsFilter::removeDuplicated( std::vector<KeyPoint>& keypoints )
 void KeyPointsFilter::removeDuplicatedSorted( std::vector<KeyPoint>& keypoints )
 {
     int i, j, n = (int)keypoints.size();
-    std::vector<int> kpidx(n);
-    std::vector<uchar> mask(n, (uchar)1);
 
-    for( i = 0; i < n; i++ )
+    if (n == 0) {
+        return;
+    }
+
+    std::vector<int> kpidx(n);
+    std::vector<int> mapping(n);
+
+    for( i = 0; i < n; i++ ) {
         kpidx[i] = i;
+    }
     std::sort(kpidx.begin(), kpidx.end(), KeyPoint_LessThan(keypoints));
 
-    for ( i = 1; j = 1; j < n; ++j ) {
-        KeyPoint& kp1 = keypoints[kpidx[j - 1]];
-        KeyPoint& kp2 = keypoints[kpidx[j]];
-        if( kp1.pt.x == kp2.pt.x && kp1.pt.y == kp2.pt.y &&
-            kp1.size == kp2.size && kp1.angle == kp2.angle ) {
-            ++j;
-        } else if (i + 1 != j) {
-            keypoints[i] = keypoints[j];
-            ++i;
+    mapping[kpidx[0]] = 0;
+    int mapindex = 1;
+    for( i = 1, j = 0; i < n; i++ )
+    {
+        const KeyPoint& kp1 = keypoints[kpidx[i]];
+        const KeyPoint& kp2 = keypoints[kpidx[j]];
+        if( kp1.pt.x != kp2.pt.x || kp1.pt.y != kp2.pt.y ||
+            kp1.size != kp2.size || kp1.angle != kp2.angle ) {
+            j = i;
+            mapping[kpidx[i]] = mapindex;
+            mapindex++;
         } else {
-            ++i;
+            mapping[kpidx[i]] = -1;
         }
     }
 
-    keypoints.resize(i);
+    for( i = 0; i < n; i++ )
+    {
+        while (mapping[i] != -1 && i != mapping[i])
+        {
+            const KeyPoint temp = keypoints[i];
+            keypoints[i] = keypoints[mapping[i]];
+            keypoints[mapping[i]] = temp;
+
+            const int tempindex = mapping[mapping[i]];
+            mapping[mapping[i]] = -1;
+            mapping[i] = tempindex;
+        }
+    }
+    keypoints.resize(mapindex);
 }
 
 }
