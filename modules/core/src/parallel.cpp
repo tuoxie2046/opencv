@@ -288,6 +288,10 @@ void cv::parallel_for_(const cv::Range& range, const cv::ParallelLoopBody& body,
 #if defined HAVE_TBB
 
     #if TBB_INTERFACE_VERSION >= 6100
+        // From TBB documentation:
+        // Any number of threads outside of the arena can submit work to the
+        // arena and be blocked. However, only the maximal number of threads
+        // specified for the arena can participate in executing the work.
         tbbArena.execute(TBBLoopBody(stripeRange, pbody));
     #else
         tbb::parallel_for(tbb::blocked_range<int>(stripeRange.start, stripeRange.end), pbody);
