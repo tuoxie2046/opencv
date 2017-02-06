@@ -367,7 +367,6 @@ int cv::getNumThreads(void)
 
 #if defined HAVE_TBB
     #if TBB_INTERFACE_VERSION >= 6100
-        printf("tbb area gap\n");
         return tbbArena.is_active()
                ? numThreads
                : tbbArena.max_concurrency();
