@@ -246,7 +246,9 @@ struct KeyPoint_LessThan
 void KeyPointsFilter::removeDuplicatedSorted( std::vector<KeyPoint>& keypoints )
 {
     int i, j, n = (int)keypoints.size();
-
+    
+    if (n < 2) return ;
+    
     std::sort(keypoints.begin(), keypoints.end(), KeyPoint_LessThan());
 
     for( i = 0, j = 1; j < n; ++j )
