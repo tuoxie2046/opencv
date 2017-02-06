@@ -367,9 +367,7 @@ int cv::getNumThreads(void)
 
 #if defined HAVE_TBB
     #if TBB_INTERFACE_VERSION >= 6100
-        return tbbArena.is_active()
-               ? numThreads
-               : tbbArena.max_concurrency();
+        return tbbArena.max_concurrency();
     #else
         return tbbScheduler.is_active()
                ? numThreads
