@@ -164,9 +164,9 @@ void KeyPointsFilter::runByPixelsMask( std::vector<KeyPoint>& keypoints, const M
     keypoints.erase(std::remove_if(keypoints.begin(), keypoints.end(), MaskPredicate(mask)), keypoints.end());
 }
 
-struct KeyPoint_LessThan
+struct KeyPointIndices_LessThan
 {
-    KeyPoint_LessThan(const std::vector<KeyPoint>& _kp) : kp(&_kp) {}
+    KeyPointIndices_LessThan(const std::vector<KeyPoint>& _kp) : kp(&_kp) {}
     bool operator()(int i, int j) const
     {
         const KeyPoint& kp1 = (*kp)[i];
@@ -199,7 +199,7 @@ void KeyPointsFilter::removeDuplicated( std::vector<KeyPoint>& keypoints )
 
     for( i = 0; i < n; i++ )
         kpidx[i] = i;
-    std::sort(kpidx.begin(), kpidx.end(), KeyPoint_LessThan(keypoints));
+    std::sort(kpidx.begin(), kpidx.end(), KeyPointIndices_LessThan(keypoints));
     for( i = 1, j = 0; i < n; i++ )
     {
         KeyPoint& kp1 = keypoints[kpidx[i]];
@@ -223,11 +223,44 @@ void KeyPointsFilter::removeDuplicated( std::vector<KeyPoint>& keypoints )
     keypoints.resize(j);
 }
 
+struct KeyPoint_LessThan
+{
+    bool operator()(const KeyPoint &kp1, const KeyPoint &kp2) const
+    {
+        if( kp1.pt.x != kp2.pt.x )
+            return kp1.pt.x < kp2.pt.x;
+        if( kp1.pt.y != kp2.pt.y )
+            return kp1.pt.y < kp2.pt.y;
+        if( kp1.size != kp2.size )
+            return kp1.size > kp2.size;
+        if( kp1.angle != kp2.angle )
+            return kp1.angle < kp2.angle;
+        if( kp1.response != kp2.response )
+            return kp1.response > kp2.response;
+        if( kp1.octave != kp2.octave )
+            return kp1.octave > kp2.octave;
+        return kp1.class_id > kp2.class_id;
+    }
+};
+
 void KeyPointsFilter::removeDuplicatedSorted( std::vector<KeyPoint>& keypoints )
 {
     int i, j, n = (int)keypoints.size();
 
-    if (n == 0) {
+    std::sort(keypoints.begin(), keypoints.end(), KeyPoint_LessThan());
+
+    for( i = 0, j = 1; j < n; ++j )
+    {
+        const KeyPoint& kp1 = keypoints[i];
+        const KeyPoint& kp2 = keypoints[j];
+        if( kp1.pt.x != kp2.pt.x || kp1.pt.y != kp2.pt.y ||
+            kp1.size != kp2.size || kp1.angle != kp2.angle ) {
+            keypoints[++i] = keypoints[j];
+        }
+    }
+    keypoints.resize(i + 1);
+
+    /*if (n == 0) {
         return;
     }
 
@@ -237,7 +270,6 @@ void KeyPointsFilter::removeDuplicatedSorted( std::vector<KeyPoint>& keypoints )
     for( i = 0; i < n; i++ ) {
         kpidx[i] = i;
     }
-    std::sort(kpidx.begin(), kpidx.end(), KeyPoint_LessThan(keypoints));
 
     mapping[kpidx[0]] = 0;
     int mapindex = 1;
@@ -268,7 +300,7 @@ void KeyPointsFilter::removeDuplicatedSorted( std::vector<KeyPoint>& keypoints )
             mapping[i] = tempindex;
         }
     }
-    keypoints.resize(mapindex);
+    keypoints.resize(mapindex);*/
 }
 
 }
