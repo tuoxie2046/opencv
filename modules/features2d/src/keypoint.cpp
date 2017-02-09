@@ -146,8 +146,8 @@ public:
     MaskPredicate( const Mat& _mask ) : mask(_mask) {}
     bool operator() (const KeyPoint& key_pt) const
     {
-        int y = std::min(std::max(0, int(key_pt.pt.y + 0.5f)), mask.cols - 1);
-        int x = std::min(std::max(0, int(key_pt.pt.x + 0.5f)), mask.rows - 1);
+        int y = std::min(std::max(0, int(key_pt.pt.y + 0.5f)), mask.rows - 1);
+        int x = std::min(std::max(0, int(key_pt.pt.x + 0.5f)), mask.cols - 1);
         return mask.at<uchar>(y, x) == 0;
     }
 
