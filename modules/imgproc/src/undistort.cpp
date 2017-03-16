@@ -152,7 +152,7 @@ if( USE_AVX2 )
         __m256d __two = _mm256_set1_pd(2.0);
         double CV_DECL_ALIGNED(32) xdv[4];
         double CV_DECL_ALIGNED(32) ydv[4];
-        for( ; j < size.width; j += 4, _x += 4 * ir[0], _y += 4 * ir[3], _w += 4 * ir[6] )
+        for( ; j <= size.width - 4; j += 4, _x += 4 * ir[0], _y += 4 * ir[3], _w += 4 * ir[6] )
         {
             // Question: Should we load the constants first?
             __m256d w = _mm256_div_pd(__one, _mm256_set_pd(_w + 3 * ir[6], _w + 2 * ir[6], _w + ir[6], _w));
