@@ -159,12 +159,12 @@ public:
 
     UMatData* allocate(int dims0, const int* sizes, int type, void* data, size_t* step, int flags, UMatUsageFlags usageFlags) const
     {
-        if( data != 0 )
-        {
-            CV_Error(Error::StsAssert, "The data should normally be NULL!");
-            // probably this is safe to do in such extreme case
-            return stdAllocator->allocate(dims0, sizes, type, data, step, flags, usageFlags);
-        }
+        // if( data != 0 )
+        // {
+        //     CV_Error(Error::StsAssert, "The data should normally be NULL!");
+        //     // probably this is safe to do in such extreme case
+        //     return stdAllocator->allocate(dims0, sizes, type, data, step, flags, usageFlags);
+        // }
         PyEnsureGIL gil;
 
         int depth = CV_MAT_DEPTH(type);

@@ -725,7 +725,7 @@ void BFMatcher::knnMatchImpl( InputArray _queryDescriptors, std::vector<std::vec
     int trainDescType = trainDescCollection.empty() ? utrainDescCollection[0].type() : trainDescCollection[0].type();
     CV_Assert( _queryDescriptors.type() == trainDescType );
 
-    const int IMGIDX_SHIFT = 18;
+    const int IMGIDX_SHIFT = 30;
     const int IMGIDX_ONE = (1 << IMGIDX_SHIFT);
 
     if( _queryDescriptors.empty() || (trainDescCollection.empty() && utrainDescCollection.empty()))
